@@ -6,6 +6,7 @@ to appear in NeurIPS 2021
 
 To run the code use the command:
 python graphGeneration.py  -f <relative_path_input_file>
+Results are saved in pickle files.
 
 Our code also uses the following external packages:
 - Code for CELL algorithm (NetGAN without GAN): </br>
