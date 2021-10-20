@@ -350,9 +350,6 @@ class NetworkGenerator:
 		
 		if option <= 0:
 			self.adj_deg = self._fix_edges( self.input_adj.toarray(), option, parameter)
-		else:
-			self._fixDensestSubgraph( clique_size=option+1, times=parameter)
-			self.adj_deg = self._fixEdgesDS( method='deterministic' )
 		
 		self._expectedOverlap()
 
@@ -382,64 +379,6 @@ class NetworkGenerator:
 				cliques.append( current_clique )
 		return cliques
 
-	def _fixDensestSubgraph( self, clique_size=2, times=1 ):
-		"""
-		times: How many densest subgraphs to include
-		"""
-		for it in range(self.peeled_iter, times):
-			self._writeMace()
-			self._executeMace( clique_size )
-			cqs = self._readMaceCliques()
-			# Get k-DS
-			exact_R = flowless( cqs, 10 )
-			DSnodes = exact_R[0]
-			H = self.peeled_G.subgraph(DSnodes)
-			DSedges = list(H.edges)
-			self.peeled_G.remove_edges_from( DSedges )
-			self.peeled_nodes.append( DSnodes )
-			self.peeled_edges.append( DSedges )
-			self.densities.append( exact_R[1] )
-		self.peeled_iter = times
-		return
-
-	def _fixEdgesDS( self, method ):
-		# Get union of all nodes in Densest Subgraphs
-		n = self.input_adj.shape[0]
-		allNodesDS = sorted( list(set().union(*self.peeled_nodes)) )
-		alledgesDS = sorted( list(set().union(*self.peeled_edges)) )
-		# Set this subgraph to zero
-		adj_copy = self.input_adj.copy()
-
-		if method == "deterministic":
-			adj_copy[np.ix_(allNodesDS, allNodesDS)] = 0.
-			targets = np.array(adj_copy.sum(axis=1)).flatten()
-			# Get probabilistic matrix with 0'ed entries
-			#try:
-			adj_deg = self._calc_adj_match_deg_fixed(targets, allNodesDS)
-			#except:
-			#	#print("Newton's method did not converge -- try configuration model...")
-			#	#adj_deg = probabilisticConfiguration_fixed( targets.aeshape((n,1)), allNodesDS)
-			adj_deg[np.ix_(allNodesDS, allNodesDS)] = self.input_adj[allNodesDS,:][:,allNodesDS].toarray()
-		elif method == "randomized":
-			adj_copy[np.ix_(allNodesDS, allNodesDS)] = 0.
-			targets = np.array(adj_copy.sum(axis=1)).flatten()
-			# Get probabilistic matrix with 0'ed entries
-			#try:
-			adj_deg = self._calc_adj_match_deg_fixed(targets, allNodesDS)
-			#except:	
-			#	print("Newton's method did not converge -- try configuration model...")
-			#	adj_deg = probabilisticConfiguration_fixed( targets.reshape((n,1)), allNodesDS)
-			# For each subgraph, assign value as p --- This will change final degree
-			ds_number = len( self.peeled_nodes )
-			for i in range(ds_number):
-				DSnodes = self.peeled_nodes[i]
-				n_s = len(DSnodes)
-				m = len(self.peeled_edges[i])
-				p = ( 2*m ) / (n_s*(n_s-1))
-				adj_deg[np.ix_(DSnodes, DSnodes)] = p # Fix selfloops
-				for j in range(n_s):
-					adj_deg[np.ix_([DSnodes[j]], [DSnodes[j]])] = 0.
-		return adj_deg
 
 	def _calc_adj_match_deg_fixed(self, targets, nodesInDS, thresh=1e-12):
 		n = targets.size
@@ -983,15 +922,12 @@ def main():
 	option_ranges = {
 		-1: [0], # Nothing
 		0: np.linspace(0,0.3,8),
-		1: [i for i in range(1,501,3)],
-		2: [i for i in range(1,101,3)],
-		3: [i for i in range(1,51,2)]
 	}
 
-	for option in [1,2]:
+	for option in [0]:
 		#break # DELETE -- only for DEBUG
 		N = NetworkGenerator( *G.getAdjG(), network_name )
-		for method in ['deterministic','randomized']:
+		for method in ['deterministic']:
 			N.initDSPeeling()
 			for parameter in option_ranges[option]:
 				print(" ******** Option: {}, Method: {}, Parameter: {}  ********".format(option,method,parameter))
@@ -1009,7 +945,7 @@ def main():
 					pk.dump( initial_dict_result, open( 'results/' + network_name + '_option' + str(option) + '_method' + method + '_param'+str(parameter)+'.pk', "wb" ) )
 					print( initial_dict_result )
 				except:
-					print("Failed for parameter: {}. Likely no subgraph to peel".format(parameter))
+					print("Failed for parameter: {}".format(parameter))
 					break
 			if option < 1: # There is no method except for k-DS
 				break
